@@ -1,20 +1,23 @@
 using API.Data;
 using API.Interfaces;
 using API.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
-builder.Services.AddDbContext<DataContext>(opt => 
+builder.Services.AddDbContext<AppDbContext>(opt => 
 {
     opt.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"));
 });
 builder.Services.AddCors();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<ITokenService, JwtTokenService>();
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+   .AddJwtBearer(options =>)
 
 var app = builder.Build();
 
