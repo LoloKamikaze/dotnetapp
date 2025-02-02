@@ -9,13 +9,13 @@ namespace API.Controllers;
 public class UsersManagementController(AppDbContext context) : BaseApiController
 {
 
-    [HttpGet]
-    public async Task<ActionResult<IEnumerable<AppUser>>> GetUsers()
-    {
-        var appUsers = await context.Users.ToListAsync();
+    [HttpGet("all")]
+public async Task<IActionResult> FetchAllUsers()
+{
+    var users = await context.Users.ToListAsync();
+    return users.Any() ? Ok(users) : NotFound("No users found.");
+}
 
-        return appUsers;
-    }
   [AllowAnonymous]
   [HttpGet("{id:int}")]  // api/users/idofuser
     public async Task<ActionResult<AppUser>> GetUser(int id)

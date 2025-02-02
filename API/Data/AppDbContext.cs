@@ -4,8 +4,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace API.Data;
 
-public class AppDbContext(DbContextOptions options) : DbContext(options)
+public class AppDbContext : DbContext
 {
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) {}
+
     public DbSet<AppUser> Users { get; set; }
-    public object? allUsers { get; internal set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AppUser>()
+            .HasIndex(u => u.UserName)
+            .IsUnique(); // Ensure usernames are unique
+    }
 }

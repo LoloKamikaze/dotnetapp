@@ -14,30 +14,27 @@ public class JwtTokenService(IConfiguration config) : ITokenService
     public string CreateToken(AppUser user)
     {
         var jwtSecretKey = config["JwtSecret"] ?? throw new Exception("Cannot access jwt key from appsettings");
-        if (jwtSecretKey.Length >= 64)
-        {
-            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey));
+        var securityKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecretKey)); // ASCII instead of UTF-8
 
-            var userClaims = new List<Claim>
+        var userClaims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, user.UserName)
+            new Claim(ClaimTypes.Name, user.UserName),
+            new Claim(ClaimTypes.Role, "User") // Adding user role
         };
 
-            var signingCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha512Signature);
+        var signingCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256); // SHA256 instead of SHA512
 
-            var tokenDescriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(userClaims),
-                Expires = DateTime.UtcNow.AddDays(7),
-                SigningCredentials = signingCredentials
-            };
+        var tokenExpiration = DateTime.UtcNow.AddMinutes(
+            int.TryParse(config["JwtExpirationMinutes"], out var expiry) ? expiry : 1440 // 1 day default
+        );
 
-            var jwtHandler = new JwtSecurityTokenHandler();
-            var token = jwtHandler.CreateToken(tokenDescriptor);
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(userClaims),
+            Expires = tokenExpiration, 
+            SigningCredentials = signingCredentials
+        };
 
-            return jwtHandler.WriteToken(token);
-        }
-
-        throw new Exception("Your jwt key needs to be longer");
+        return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityTokenHandler().CreateToken(tokenDescriptor));
     }
 }
