@@ -13,28 +13,37 @@ public class JwtTokenService(IConfiguration config) : ITokenService
 {
     public string CreateToken(AppUser user)
     {
-        var jwtSecretKey = config["JwtSecret"] ?? throw new Exception("Cannot access jwt key from appsettings");
-        var securityKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecretKey)); // ASCII instead of UTF-8
-
-        var userClaims = new List<Claim>
+        var jwtSecretKey = config["JwtTokenKey"];
+        
+        if (string.IsNullOrEmpty(jwtSecretKey))
         {
-            new Claim(ClaimTypes.Name, user.UserName),
-            new Claim(ClaimTypes.Role, "User") // Adding user role
-        };
+            throw new Exception("JwtTokenKey is missing from configuration!");
+        }
 
-        var signingCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256); // SHA256 instead of SHA512
-
-        var tokenExpiration = DateTime.UtcNow.AddMinutes(
-            int.TryParse(config["JwtExpirationMinutes"], out var expiry) ? expiry : 1440 // 1 day default
-        );
-
-        var tokenDescriptor = new SecurityTokenDescriptor
+        if (jwtSecretKey.Length >= 64)
         {
-            Subject = new ClaimsIdentity(userClaims),
-            Expires = tokenExpiration, 
-            SigningCredentials = signingCredentials
-        };
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey));
 
-        return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityTokenHandler().CreateToken(tokenDescriptor));
+            var userClaims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.UserName)
+            };
+
+            var signingCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha512Signature);
+
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(userClaims),
+                Expires = DateTime.UtcNow.AddDays(7),
+                SigningCredentials = signingCredentials
+            };
+
+            var jwtHandler = new JwtSecurityTokenHandler();
+            var token = jwtHandler.CreateToken(tokenDescriptor);
+
+            return jwtHandler.WriteToken(token);
+        }
+
+        throw new Exception("Your JwtTokenKey is too short! It must be at least 64 characters.");
     }
 }

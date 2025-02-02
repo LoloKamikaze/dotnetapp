@@ -4,73 +4,131 @@ using API.Data;
 using API.DTOs;
 using API.Entities;
 using API.Interfaces;
-using API.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace API.Controllers;
+
 [Route("api/auth")]
 [ApiController]
-public class AuthController(AppDbContext context, ITokenService tokenAvailability ) : BaseApiController
+public class AuthController : ControllerBase
 {
-    [HttpPost("inregistrare")] // inregistrare cont
-    public async Task<ActionResult<UserMainDto>> Register(RegisterDto registerDto) {
-        if (await UserExists(registerDto.Username)) return BadRequest("Numele de utilizator este deja luat");
-       
-        using var rng = RandomNumberGenerator.Create();
-byte[] salt = new byte[16];
-rng.GetBytes(salt);
+    private readonly AppDbContext _context;
+    private readonly ITokenService _tokenAvailability;
 
-using var pbkdf2 = new Rfc2898DeriveBytes(registerDto.Password, salt, 100000, HashAlgorithmName.SHA256);
-byte[] hash = pbkdf2.GetBytes(32);
-
-var user = new AppUser 
-{
-    UserName = registerDto.Username.ToLower(),
-    PasswordHash = hash,
-    PasswordSalt = salt
-};
-
-
-      context.Users.Add(user);
-      await context.SaveChangesAsync();
-
-      return new UserMainDto
-      {
-        Username = user.UserName,
-        Token= tokenAvailability.CreateToken(user)
-      };
-
+    public AuthController(AppDbContext context, ITokenService tokenAvailability)
+    {
+        _context = context;
+        _tokenAvailability = tokenAvailability;
     }
 
-    [HttpPost("login")]
-
-    public async Task<ActionResult<UserMainDto>> Login(LoginDto loginDto) 
+    // 🔹 Register a new user using JSON body
+    [HttpPost("inregistrare")]
+    public async Task<ActionResult<UserMainDto>> Register([FromBody] RegisterDto registerDto) 
     {
-        var user = await context.Users.FirstOrDefaultAsync(x => 
-           x.UserName == loginDto.Username.ToLower());
+        if (await UserExists(registerDto.Username)) 
+            return BadRequest("Numele de utilizator este deja luat");
 
-        if (user ==null) return Unauthorized("Username sau parola invalida");
+        using var rng = RandomNumberGenerator.Create();
+        byte[] salt = new byte[16];
+        rng.GetBytes(salt);
 
-        using var hmac = new HMACSHA512(user.PasswordSalt);
+        using var pbkdf2 = new Rfc2898DeriveBytes(registerDto.Password, salt, 100000, HashAlgorithmName.SHA256);
+        byte[] hash = pbkdf2.GetBytes(32);
 
-        var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(loginDto.Password));
+        var user = new AppUser 
+        {
+            UserName = registerDto.Username.ToLower(),
+            PasswordHash = hash,
+            PasswordSalt = salt
+        };
+
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        return new UserMainDto
+        {
+            Username = user.UserName,
+            Token = _tokenAvailability.CreateToken(user)
+        };
+    }
+
+    // 🔹 Register a new user using Query Parameters
+    [HttpPost("register")]
+    public async Task<ActionResult<UserMainDto>> RegisterQuery([FromQuery] string username, [FromQuery] string password)
+    {
+        if (await UserExists(username)) 
+            return BadRequest("Numele de utilizator este deja luat");
+
+        using var rng = RandomNumberGenerator.Create();
+        byte[] salt = new byte[16];
+        rng.GetBytes(salt);
+
+        using var pbkdf2 = new Rfc2898DeriveBytes(password, salt, 100000, HashAlgorithmName.SHA256);
+        byte[] hash = pbkdf2.GetBytes(32);
+
+        var user = new AppUser
+        {
+            UserName = username.ToLower(),
+            PasswordHash = hash,
+            PasswordSalt = salt
+        };
+
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        return new UserMainDto
+        {
+            Username = user.UserName,
+            Token = _tokenAvailability.CreateToken(user)
+        };
+    }
+
+    // 🔹 Login User
+    [HttpPost("login")]
+    public async Task<ActionResult<UserMainDto>> Login([FromBody] LoginDto loginDto) 
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(x => x.UserName == loginDto.Username.ToLower());
+
+        if (user == null) 
+            return Unauthorized("Username sau parola invalida");
+
+        using var pbkdf2 = new Rfc2898DeriveBytes(loginDto.Password, user.PasswordSalt, 100000, HashAlgorithmName.SHA256);
+        byte[] computedHash = pbkdf2.GetBytes(32);
 
         for (int i = 0; i < computedHash.Length; i++)
         {
-            if (computedHash[i] != user.PasswordHash[i]) return Unauthorized("Parola invalida");
+            if (computedHash[i] != user.PasswordHash[i]) 
+                return Unauthorized("Parola invalida");
         }
-        return new UserMainDto {
-            Username = user.UserName,
-            Token = tokenAvailability.CreateToken(user)
-    };
-    }
-    private async Task<bool> UserExists(string username) {
-        return await context.Users.AnyAsync(x => x.UserName.ToLower() == username.ToLower()); //Bob !=bob
-    }
-[HttpGet("users")] // New route: GET /api/auth/users
-public async Task<ActionResult<IEnumerable<AppUser>>> GetUsers() {
-    return await context.Users.ToListAsync();
-}
 
+        return new UserMainDto 
+        {
+            Username = user.UserName,
+            Token = _tokenAvailability.CreateToken(user)
+        };
+    }
+
+    // 🔹 Get all users
+    [HttpGet("users")]
+    public async Task<ActionResult<IEnumerable<AppUser>>> GetUsers() 
+    {
+        return await _context.Users.ToListAsync();
+    }
+
+    // 🔹 Get a user by ID
+    [HttpGet("user/{id}")]
+    public async Task<ActionResult<AppUser>> GetUser(int id)
+    {
+        var user = await _context.Users.FindAsync(id);
+        if (user == null) 
+            return NotFound();
+        return user;
+    }
+
+    // 🔹 Check if a username exists
+    private async Task<bool> UserExists(string username) 
+    {
+        return await _context.Users.AnyAsync(x => x.UserName.ToLower() == username.ToLower());
+    }
 }
